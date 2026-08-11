@@ -1,0 +1,11 @@
+[package]
+name = "agent-friction-cli"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+agent-friction-core = { path = "../core" }
+
+[[bin]]
+name = "agent-friction"
+path = "src/main.rs"

@@ -1,0 +1,4 @@
+[package]
+name = "agent-friction-core"
+edition.workspace = true
+version.workspace = true
