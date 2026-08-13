@@ -68,6 +68,7 @@ impl Db {
         Ok(tool_failures_pruned + permission_events_pruned)
     }
 
+    #[cfg(test)]
     pub(crate) fn get_permission(&self, id: i64) -> Result<PermissionEvent> {
         let sql = "SELECT * FROM permission_events WHERE id = ?1";
         let permission_event = self.conn().query_one(sql, rusqlite::params![id], |r| {
@@ -87,6 +88,7 @@ impl Db {
         Ok(permission_event)
     }
 
+    #[cfg(test)]
     pub(crate) fn get_tool_failure(&self, id: i64) -> Result<ToolFailure> {
         let sql = "SELECT * FROM tool_failures WHERE id = ?1";
         let tool_failure = self.conn().query_one(sql, rusqlite::params![id], |r| {
