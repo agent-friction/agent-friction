@@ -8,9 +8,11 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-# Carries a version as well as a path: the path is what the workspace builds
-# against, the version is what a published crate resolves from the registry.
-agent-friction-core = { path = "../core", version = "0.0.1" }
+# Path only, deliberately. A `version` here is needed just for `cargo publish`,
+# so the dependency resolves from the registry -- and it would be a second place
+# the version lives, drifting silently from the workspace one every release. Add
+# it back if these crates ever go to crates.io.
+agent-friction-core = { path = "../core" }
 anyhow = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
