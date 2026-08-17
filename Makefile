@@ -214,14 +214,19 @@ unlink:
 # cannot be published before the ones it pins exist on the registry, or the
 # first install resolves nothing.
 #
+# The ./ prefixes are load-bearing. npm reads a bare `npm/cli` as the GitHub
+# shorthand for github.com/npm/cli -- the npm CLI itself -- rather than as a
+# path, and publishes that instead. A leading ./ forces it to mean the
+# directory.
+#
 # Guarded. A bare `make publish` only rehearses; CONFIRM=1 makes it real.
 publish: dist
 	@$(if $(CONFIRM),true,echo "DRY RUN -- re-run with CONFIRM=1 to publish for real"; echo)
 	@for p in $(PLATFORMS); do \
-		npm publish $(DIST)/$(BIN)-$$p --access public $(if $(CONFIRM),,--dry-run) || exit 1; \
+		npm publish ./$(DIST)/$(BIN)-$$p --access public $(if $(CONFIRM),,--dry-run) || exit 1; \
 	done
 	@for pkg in $(JS_PKGS); do \
-		npm publish $$pkg --access public $(if $(CONFIRM),,--dry-run) || exit 1; \
+		npm publish ./$$pkg --access public $(if $(CONFIRM),,--dry-run) || exit 1; \
 	done
 
 # ---------------------------------------------------------------------------
