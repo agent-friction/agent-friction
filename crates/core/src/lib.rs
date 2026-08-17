@@ -6,9 +6,12 @@ pub mod types;
 pub mod store;
 pub mod query;
 pub mod analysis;
+pub mod collapse;
 
 pub use error::{Error, Result};
 pub use query::{FailureStat, PermissionStat};
 pub use types::{Decision, PermissionEvent, Source, ToolFailure};
 pub use db::Db;
-pub use query::{Scope};
+pub use query::{Scope, Limits};
+pub use analysis::{Suggestion, Verdict, analyze};
+pub use collapse::{CollapsedStat, collapse};

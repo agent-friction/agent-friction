@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod commands;
+pub mod display;
 
 use anyhow::{Context, Result};
 use agent_friction_core::Db;
@@ -16,5 +17,7 @@ pub fn run(cli: Cli) -> Result<()> {
 
     match cli.command {
         Command::Log(log) => commands::logs::run(&db, log),
+        Command::Stats(stats) => commands::stats::run(&db, stats),
+        Command::Analyze(args) => commands::analyze::run(&db, args),
     }
 }

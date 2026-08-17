@@ -12,7 +12,7 @@ pub fn run(db: &Db, logs: LogCommand) -> Result<()> {
 }
 
 fn run_permissions(db: &Db, permission: PermissionArgs) -> Result<()> {
-    db.insert_permission(&PermissionEvent {
+    let mut permission_event = PermissionEvent {
         id: None,
         timestamp: Utc::now(),
         agent: permission.common.agent,
@@ -20,11 +20,16 @@ fn run_permissions(db: &Db, permission: PermissionArgs) -> Result<()> {
         repo: permission.common.repo,
         model: permission.common.model,
         tool: permission.common.tool,
-        pattern: permission.pattern,
+        pattern: String::new(),
         decision: permission.decision,
         context: permission.common.context,
-    })
-    .context("inserting permission into db")?;
+    };
+
+    for pattern in permission.pattern {
+        permission_event.pattern = pattern;
+        db.insert_permission(&permission_event)
+            .context("inserting permission into db")?;
+    }
 
     Ok(())
 }

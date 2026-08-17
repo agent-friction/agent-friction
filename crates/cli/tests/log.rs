@@ -1,5 +1,5 @@
 use agent_friction_cli::{cli::Cli, run};
-use agent_friction_core::{Db, Scope};
+use agent_friction_core::{Db, Limits, Scope};
 use anyhow::Result;
 use chrono::{TimeDelta, Utc};
 use clap::Parser;
@@ -27,7 +27,7 @@ fn log_failure_writes_a_record() -> Result<()> {
     run(cli)?;
 
     let db = Db::open(&db_path)?;
-    let stats = db.get_failure_stats(Utc::now() - TimeDelta::days(1), Scope::Global)?;
+    let stats = db.get_failure_stats(Utc::now() - TimeDelta::days(1), Scope::Global, Limits::default())?;
 
     assert_eq!(stats.len(), 1);
     assert_eq!(stats[0].tool, "bash");

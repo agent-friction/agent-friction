@@ -2,6 +2,7 @@
 name = "agent-friction-core"
 edition.workspace = true
 version.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 chrono = { workspace = true }

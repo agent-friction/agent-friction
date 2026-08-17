@@ -4,9 +4,10 @@ members = ["crates/*"]
 
 [workspace.package]
 edition = "2024"
-version = "0.0.0"
+version = "0.0.1"
 license = "Apache-2.0"
 repository = "https://github.com/Cali0707/agent-friction"
+rust-version = "1.94"
 
 [workspace.dependencies]
 anyhow = "1.0.104"

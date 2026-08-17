@@ -2,6 +2,7 @@
 name = "agent-friction-cli"
 edition.workspace = true
 version.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 agent-friction-core = { path = "../core" }
@@ -10,6 +11,8 @@ clap = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 tempfile = { workspace = true }
+comfy-table = { version = "8.0.0", features = ["custom_styling"] }
+interim = { version = "0.2.1", features = ["chrono_0_4"] }
 
 [[bin]]
 name = "agent-friction"

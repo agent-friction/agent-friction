@@ -41,6 +41,26 @@ struct FailureRaw {
     source: Source,
 }
 
+/// How much of the tail to cut before returning. Both are about keeping a
+/// terminal table readable, so they are applied *after* aggregation -- the
+/// counts a row reports are always its true totals, never a filtered subset.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Limits {
+    /// Drop rows seen fewer than this many times.
+    pub min_count: i64,
+    /// Keep only the this many busiest rows.
+    pub limit: Option<i64>,
+}
+
+impl Limits {
+    /// SQLite reads a negative LIMIT as unbounded.
+    const UNLIMITED: i64 = -1;
+
+    fn sql_limit(&self) -> i64 {
+        self.limit.unwrap_or(Self::UNLIMITED)
+    }
+}
+
 impl Db {
     const WHERE_CLAUSE: &str = "WHERE timestamp >= :since AND (:repo IS NULL OR repo = :repo)";
 
@@ -48,17 +68,34 @@ impl Db {
         &self,
         since: DateTime<Utc>,
         scope: Scope,
+        limits: Limits,
     ) -> Result<Vec<PermissionStat>> {
+        // Two orderings, and they are doing different jobs. The inner one ranks
+        // by volume, because a limit is only meaningful if it keeps the busiest
+        // rows rather than an arbitrary alphabetical slice. The outer one puts
+        // what survived back into pattern order, so related commands sit
+        // together and a shorter prefix lands directly above the patterns that
+        // extend it -- `git status` above `git status --short`.
+        //
+        // This is raw ground truth, deliberately uncollapsed; see `collapse`
+        // for the interpretation built on top of it.
         let sql = format!(
-            "SELECT tool,
-                          pattern,
-                          SUM(CASE WHEN decision = :allow_once THEN 1 ELSE 0 END) as allow_once,
-                          SUM(CASE WHEN decision = :allow_always THEN 1 ELSE 0 END) as allow_always,
-                          SUM(CASE WHEN decision = :deny THEN 1 ELSE 0 END) as deny
-                   FROM permission_events
-                   {}
-                   GROUP BY tool, pattern
-                   ORDER BY allow_once DESC, tool ASC, pattern ASC",
+            "SELECT tool, pattern, allow_once, allow_always, deny
+             FROM (
+                 SELECT tool,
+                        pattern,
+                        SUM(CASE WHEN decision = :allow_once THEN 1 ELSE 0 END) as allow_once,
+                        SUM(CASE WHEN decision = :allow_always THEN 1 ELSE 0 END) as allow_always,
+                        SUM(CASE WHEN decision = :deny THEN 1 ELSE 0 END) as deny,
+                        COUNT(*) as total
+                 FROM permission_events
+                 {}
+                 GROUP BY tool, pattern
+                 HAVING total >= :min_count
+                 ORDER BY total DESC, tool ASC, pattern ASC
+                 LIMIT :limit
+             )
+             ORDER BY tool ASC, pattern ASC",
             Self::WHERE_CLAUSE
         );
 
@@ -70,6 +107,8 @@ impl Db {
                 ":deny": Decision::Deny.as_str(),
                 ":since": since,
                 ":repo": scope.as_repo(),
+                ":min_count": limits.min_count,
+                ":limit": limits.sql_limit(),
             },
             |r| {
                 Ok(PermissionStat {
@@ -89,6 +128,7 @@ impl Db {
         &self,
         since: DateTime<Utc>,
         scope: Scope,
+        limits: Limits,
     ) -> Result<Vec<FailureStat>> {
         let sql = format!(
             "SELECT tool, error, source
@@ -113,7 +153,15 @@ impl Db {
         )?;
 
         let raw = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(Self::aggregate_failures(raw))
+        let mut stats = Self::aggregate_failures(raw);
+
+        // Grouping happens in Rust here (normalize_error has no SQL
+        // equivalent), so the trimming does too. Already sorted by count.
+        stats.retain(|s| s.count >= limits.min_count);
+        if let Some(limit) = limits.limit {
+            stats.truncate(limit.max(0) as usize);
+        }
+        Ok(stats)
     }
 
     fn aggregate_failures(rows: impl IntoIterator<Item = FailureRaw>) -> Vec<FailureStat> {
@@ -154,6 +202,15 @@ impl Scope {
         match self {
             Scope::Repo(repo) => Some(repo.as_str()),
             Scope::Global => None,
+        }
+    }
+}
+
+impl From<Option<String>> for Scope {
+    fn from(value: Option<String>) -> Self {
+        match value {
+            Some(repo) => Scope::Repo(repo),
+            None => Scope::Global,
         }
     }
 }
@@ -237,7 +294,7 @@ mod test {
             ],
         )?;
 
-        let stats = db.get_permission_stats(Utc::now() - TimeDelta::days(1), Scope::Global)?;
+        let stats = db.get_permission_stats(Utc::now() - TimeDelta::days(1), Scope::Global, Limits::default())?;
 
         assert_eq!(stats.len(), 1);
         assert_eq!(stats.first().unwrap().allow_once, 2);
@@ -286,7 +343,7 @@ mod test {
 
         insert_permissions(&db, permissions)?;
 
-        let stats = db.get_permission_stats(Utc::now() - TimeDelta::days(1), Scope::Global)?;
+        let stats = db.get_permission_stats(Utc::now() - TimeDelta::days(1), Scope::Global, Limits::default())?;
 
         assert_eq!(stats.len(), 1);
         assert_eq!(stats.first().unwrap().allow_once, 1);
@@ -338,6 +395,7 @@ mod test {
         let stats = db.get_permission_stats(
             Utc::now() - TimeDelta::days(1),
             Scope::Repo(String::from("test")),
+            Limits::default(),
         )?;
 
         assert_eq!(stats.len(), 1);
@@ -402,24 +460,25 @@ mod test {
         let stats = db.get_permission_stats(
             Utc::now() - TimeDelta::days(1),
             Scope::Repo(String::from("test")),
+            Limits::default(),
         )?;
 
         assert_eq!(
             stats,
             vec![
                 PermissionStat {
-                    tool: "edit".into(),
-                    pattern: "*".into(),
-                    allow_once: 2,
-                    allow_always: 0,
-                    deny: 0
-                },
-                PermissionStat {
                     tool: "delete".into(),
                     pattern: "*".into(),
                     allow_once: 1,
                     allow_always: 0,
                     deny: 1
+                },
+                PermissionStat {
+                    tool: "edit".into(),
+                    pattern: "*".into(),
+                    allow_once: 2,
+                    allow_always: 0,
+                    deny: 0
                 },
                 PermissionStat {
                     tool: "read".into(),
@@ -430,6 +489,70 @@ mod test {
                 },
             ]
         );
+
+        Ok(())
+    }
+
+    /// The limit has to keep the *busiest* rows, then hand them back in pattern
+    /// order -- not simply cut the alphabetical tail.
+    #[test]
+    fn permission_limits_keep_the_busiest_rows_in_pattern_order() -> Result<()> {
+        let db = Db::open_in_memory()?;
+        let mut permissions = Vec::new();
+        for (pattern, count) in [("zebra", 5), ("alpha", 3), ("middle", 1)] {
+            for _ in 0..count {
+                permissions.push(create_permission(
+                    None,
+                    String::from("bash"),
+                    String::from(pattern),
+                    Decision::AllowOnce,
+                ));
+            }
+        }
+        insert_permissions(&db, permissions)?;
+
+        let limits = Limits {
+            min_count: 0,
+            limit: Some(2),
+        };
+        let stats = db.get_permission_stats(Utc::now() - TimeDelta::days(1), Scope::Global, limits)?;
+
+        // `middle` is dropped for being quietest, not for sorting last.
+        let patterns: Vec<&str> = stats.iter().map(|s| s.pattern.as_str()).collect();
+        assert_eq!(patterns, vec!["alpha", "zebra"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn min_count_drops_one_off_patterns() -> Result<()> {
+        let db = Db::open_in_memory()?;
+        let mut permissions = vec![create_permission(
+            None,
+            String::from("bash"),
+            String::from("seen once"),
+            Decision::AllowOnce,
+        )];
+        for _ in 0..3 {
+            permissions.push(create_permission(
+                None,
+                String::from("bash"),
+                String::from("seen often"),
+                Decision::AllowOnce,
+            ));
+        }
+        insert_permissions(&db, permissions)?;
+
+        let limits = Limits {
+            min_count: 2,
+            limit: None,
+        };
+        let stats = db.get_permission_stats(Utc::now() - TimeDelta::days(1), Scope::Global, limits)?;
+
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].pattern, "seen often");
+        // The count reported is the true total, not a filtered subset.
+        assert_eq!(stats[0].allow_once, 3);
 
         Ok(())
     }
@@ -504,7 +627,7 @@ mod test {
             ],
         )?;
 
-        let stats = db.get_failure_stats(Utc::now() - TimeDelta::days(1), Scope::Global)?;
+        let stats = db.get_failure_stats(Utc::now() - TimeDelta::days(1), Scope::Global, Limits::default())?;
 
         assert_eq!(
             stats,
@@ -573,7 +696,7 @@ mod test {
         )?;
 
         let stats =
-            db.get_failure_stats(Utc::now() - TimeDelta::days(1), Scope::Repo("test".into()))?;
+            db.get_failure_stats(Utc::now() - TimeDelta::days(1), Scope::Repo("test".into()), Limits::default())?;
 
         assert_eq!(
             stats,
@@ -642,7 +765,7 @@ mod test {
         )?;
 
         let stats =
-            db.get_failure_stats(Utc::now() - TimeDelta::days(1), Scope::Repo("test".into()))?;
+            db.get_failure_stats(Utc::now() - TimeDelta::days(1), Scope::Repo("test".into()), Limits::default())?;
 
         assert_eq!(
             stats,
