@@ -35,7 +35,7 @@ recommendations from it is the obvious next step.
 Add the marketplace and install the plugin:
 
 ```sh
-/plugin marketplace add github:agent-friction/agent-friction
+/plugin marketplace agent-friction/agent-friction
 /plugin install agent-friction@agent-friction
 ```
 
