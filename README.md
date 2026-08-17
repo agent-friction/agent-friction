@@ -4,8 +4,8 @@ Records every permission prompt you answer and every tool call that fails, then
 tells you which approvals you keep granting by hand.
 
 You approve `tail -15`, then `tail -20`, then `tail -60`. agent-friction notices
-those are the same decision three times, folds them into `tail *`, and — once
-the evidence is there and nothing in that family was ever denied — suggests you
+those are the same decision three times, folds them into `tail *`, and once
+the evidence is there and nothing in that family was ever denied suggests you
 allow-list it. Fewer prompts, and the ones left are the ones worth reading.
 
 ```
@@ -21,7 +21,7 @@ allow-list it. Fewer prompts, and the ones left are the ones worth reading.
 Nothing leaves your machine. Everything lands in a local SQLite database.
 
 Failures are recorded for the same reason: the errors your agent hits over and
-over are a map of where your setup fights it — a missing tool, a command that
+over are a map of where your setup fights it: a missing tool, a command that
 never works in this repo, a path it keeps guessing wrong. Right now that's
 reported as counts of similar errors; teaching `analyze` to make
 recommendations from it is the obvious next step.
