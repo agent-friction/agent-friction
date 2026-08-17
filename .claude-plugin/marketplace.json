@@ -1,0 +1,13 @@
+{
+  "name": "agent-friction",
+  "owner": {
+    "url": "https://github.com/Cali0707/agent-friction"
+  },
+  "plugins": [
+    {
+      "name": "agent-friction",
+      "source": "./claude",
+      "description": "Records the permission prompts you answer and the tool calls that fail, so friction can be measured instead of guessed at."
+    }
+  ]
+}

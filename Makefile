@@ -1,12 +1,18 @@
 # agent-friction
 #
-# The npm plugin package ships no binary of its own. It declares one
-# optionalDependency per platform, each a small package holding a single
-# prebuilt Rust binary, and npm installs only the one whose os/cpu fields match
-# the host. resolveBinary() locates it at runtime. These targets build those
-# binaries and stage those packages.
+# Three tiers of npm package, and the order between them matters.
 #
-#   make local  build for this machine and wire it into the plugin
+#   @agent-friction/<platform>  one prebuilt Rust binary, nothing else
+#   @agent-friction/cli         the `agent-friction` command; declares the
+#                               platform packages as optionalDependencies, so
+#                               npm installs only the one matching the host, and
+#                               owns resolveBinary() which finds it at runtime
+#   @agent-friction/opencode    the host adapter; depends on the cli package
+#
+# Adapters are per-host and deliberately thin: another one (pi, say) should not
+# drag opencode's types into an install that has nothing to do with opencode.
+#
+#   make local  build for this machine and wire it into the packages
 #   make dist   build every binary and stage all npm packages
 #   make check  prove a real install works
 #   make setup  install the cross-compilation toolchain
@@ -14,16 +20,27 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
-# One source of truth for the version. The plugin pins its platform packages to
-# an exact version, so drift here is not cosmetic: npm fails to resolve the
-# binary package and the plugin installs with nothing to run.
+# One source of truth for the version. Packages pin each other to an exact
+# version, so drift here is not cosmetic: npm fails to resolve and the plugin
+# installs with nothing to run.
 VERSION := $(shell sed -n 's/^version = "\([^"]*\)".*/\1/p' Cargo.toml | head -1)
 
 BIN      := agent-friction
 CRATE    := agent-friction-cli
-PLUGIN   := npm/agent-friction
 DIST     := dist/npm
 SCRATCH  := dist/check
+
+# Everything is published under a scope.
+SCOPE    := @agent-friction
+
+# The JS packages, in dependency order -- which is also publish order.
+CLI      := npm/cli
+ADAPTERS := npm/opencode
+JS_PKGS  := $(CLI) $(ADAPTERS)
+
+# npm flattens a scope into the tarball filename: @agent-friction/cli packs as
+# agent-friction-cli-<version>.tgz.
+TARBALL   = $(patsubst @%,%,$(SCOPE))-$(1)-$(VERSION).tgz
 
 # npm <platform>-<arch>  ->  rust target triple
 PLATFORMS := darwin-arm64 darwin-x64 linux-x64 linux-arm64
@@ -55,7 +72,7 @@ OPENCODE_PLUGINS := $(HOME)/.config/opencode/plugins
 BINDIR           := $(HOME)/.local/bin
 
 
-.PHONY: help setup local link unlink dist publish plugin binaries sync-version clean test check
+.PHONY: help setup local link unlink dist publish packages binaries sync-version clean test check
 
 help:
 	@echo "agent-friction $(VERSION)"
@@ -66,8 +83,8 @@ help:
 	@echo "  make setup            install cross-compilation toolchain"
 	@echo "  make binaries         build the Rust binary for all platforms"
 	@echo "  make build-PLATFORM   build one platform ($(PLATFORMS))"
-	@echo "  make plugin           build the npm plugin package (JS + types)"
-	@echo "  make dist             binaries + plugin, staged into $(DIST)"
+	@echo "  make packages         build the JS packages ($(JS_PKGS))"
+	@echo "  make dist             binaries + packages, staged into $(DIST)"
 	@echo "  make check            install into a scratch project and run the CLI"
 	@echo "  make publish          publish every package to npm"
 	@echo "  make test             cargo test"
@@ -103,52 +120,67 @@ test:
 
 # A platform package is just the binary plus a package.json. It deliberately has
 # no "exports" field: resolveBinary() finds the binary with
-# require.resolve("agent-friction-<platform>/agent-friction"), and an exports map
+# require.resolve("@agent-friction/<platform>/agent-friction"), and an exports map
 # would have to enumerate that subpath to keep it resolvable. Omitting exports
 # leaves all subpaths resolvable, which is what esbuild and swc do here too.
 package-%: build-%
 	@rm -rf $(DIST)/$(BIN)-$*
 	@mkdir -p $(DIST)/$(BIN)-$*
 	@install -m 755 target/$(TARGET_$*)/release/$(BIN) $(DIST)/$(BIN)-$*/$(BIN)
-	@jq -n --arg name "$(BIN)-$*" --arg version "$(VERSION)" \
+	@jq -n --arg name "$(SCOPE)/$*" --arg version "$(VERSION)" \
 		--arg os "$(word 1,$(subst -, ,$*))" --arg cpu "$(word 2,$(subst -, ,$*))" \
 		--arg bin "$(BIN)" \
-		'{name:$$name, version:$$version, description:("The agent-friction binary for "+$$os+" "+$$cpu+"."), license:"Apache-2.0", repository:"https://github.com/Cali0707/agent-friction", os:[$$os], cpu:[$$cpu], files:[$$bin], preferUnplugged:true}' \
+		'{name:$$name, version:$$version, description:("The agent-friction binary for "+$$os+" "+$$cpu+"."), license:"Apache-2.0", repository:"https://github.com/agent-friction/agent-friction", os:[$$os], cpu:[$$cpu], files:[$$bin], preferUnplugged:true}' \
 		> $(DIST)/$(BIN)-$*/package.json
-	@printf '# %s\n\nThe precompiled `%s` binary for %s %s.\n\nDo not install this directly. It is an optional dependency of\n[`%s`](https://www.npmjs.com/package/%s), which picks the right one for your\nplatform automatically.\n' \
-		"$(BIN)-$*" "$(BIN)" "$(word 1,$(subst -, ,$*))" "$(word 2,$(subst -, ,$*))" "$(BIN)" "$(BIN)" \
+	@printf '# %s\n\nThe precompiled `%s` binary for %s %s.\n\nDo not install this directly. It is an optional dependency of\n[`%s/cli`](https://www.npmjs.com/package/%s/cli), which picks the right one for\nyour platform automatically.\n' \
+		"$(SCOPE)/$*" "$(BIN)" "$(word 1,$(subst -, ,$*))" "$(word 2,$(subst -, ,$*))" "$(SCOPE)" "$(SCOPE)" \
 		> $(DIST)/$(BIN)-$*/README.md
-	@echo "    staged $(DIST)/$(BIN)-$*"
+	@echo "    staged $(DIST)/$(BIN)-$* as $(SCOPE)/$*"
 
-# Rewrites the plugin's version and optionalDependencies from VERSION and
-# PLATFORMS, so the packages it pins are always the ones we just built.
+# Rewrites every version and every internal pin from VERSION and PLATFORMS, so
+# what a package depends on is always what we just built. The cli package pins
+# the platform packages; each adapter pins the cli package.
 sync-version:
 	@jq --indent 2 --arg v "$(VERSION)" \
-		--argjson deps "$$(printf '%s\n' $(PLATFORMS) | jq -R --arg v "$(VERSION)" '{("$(BIN)-" + .): $$v}' | jq -s add)" \
+		--argjson deps "$$(printf '%s\n' $(PLATFORMS) | jq -R --arg v "$(VERSION)" '{("$(SCOPE)/" + .): $$v}' | jq -s add)" \
 		'.version = $$v | .optionalDependencies = $$deps' \
-		$(PLUGIN)/package.json > $(PLUGIN)/package.json.tmp
-	@mv $(PLUGIN)/package.json.tmp $(PLUGIN)/package.json
-	@echo "    version $(VERSION) -> $(PLUGIN)/package.json"
+		$(CLI)/package.json > $(CLI)/package.json.tmp
+	@mv $(CLI)/package.json.tmp $(CLI)/package.json
+	@echo "    version $(VERSION) -> $(CLI)/package.json"
+	@for pkg in $(ADAPTERS); do \
+		jq --indent 2 --arg v "$(VERSION)" \
+			'.version = $$v | .dependencies["$(SCOPE)/cli"] = $$v' \
+			$$pkg/package.json > $$pkg/package.json.tmp || exit 1; \
+		mv $$pkg/package.json.tmp $$pkg/package.json; \
+		echo "    version $(VERSION) -> $$pkg/package.json"; \
+	done
 
-plugin: sync-version
-	@echo "==> plugin"
-	cd $(PLUGIN) && bun install && bun run build
+# One `bun install` at the workspace root, so the adapters resolve their
+# dependency on the cli package from the sibling directory rather than the
+# registry -- where, for a version we have not published yet, it does not exist.
+# The exact-version pin in package.json is what a published install uses.
+packages: sync-version
+	@cd npm && bun install
+	@for pkg in $(JS_PKGS); do \
+		echo "==> $$pkg"; \
+		(cd $$pkg && bun run build) || exit 1; \
+	done
 
-dist: $(addprefix package-,$(PLATFORMS)) plugin
+dist: $(addprefix package-,$(PLATFORMS)) packages
 	@echo "dist ready: $(DIST)"
 
 # Dev loop. Builds only the binary this machine can run, then drops its platform
-# package into the plugin's node_modules exactly where npm would put it, so
+# package into the cli package's node_modules exactly where npm would put it, so
 # resolveBinary() resolves it the same way it will in a real install instead of
 # silently falling back to PATH.
-local: package-$(HOST) plugin
-	@rm -rf $(PLUGIN)/node_modules/$(BIN)-$(HOST)
-	@mkdir -p $(PLUGIN)/node_modules
-	@cp -R $(DIST)/$(BIN)-$(HOST) $(PLUGIN)/node_modules/$(BIN)-$(HOST)
+local: package-$(HOST) packages
+	@rm -rf $(CLI)/node_modules/$(SCOPE)/$(HOST)
+	@mkdir -p $(CLI)/node_modules/$(SCOPE)
+	@cp -R $(DIST)/$(BIN)-$(HOST) $(CLI)/node_modules/$(SCOPE)/$(HOST)
 	@echo
 	@echo "local build ready ($(HOST))"
-	@echo "  plugin:  $(PLUGIN)/dist/plugin.js"
-	@echo "  cli:     node $(PLUGIN)/dist/cli.js"
+	@echo "  plugin:  npm/opencode/dist/plugin.js"
+	@echo "  cli:     node $(CLI)/dist/cli.js"
 	@echo "  binary:  target/$(TARGET_$(HOST))/release/$(BIN)"
 
 # Installs into opencode globally, as symlinks so a rebuild takes effect without
@@ -160,7 +192,7 @@ local: package-$(HOST) plugin
 # -- the fallback resolveBinary() already provides for cargo/Homebrew installs.
 link: local
 	@mkdir -p $(OPENCODE_PLUGINS) $(BINDIR)
-	@ln -sfn $(CURDIR)/$(PLUGIN)/dist/plugin.js $(OPENCODE_PLUGINS)/$(BIN).js
+	@ln -sfn $(CURDIR)/npm/opencode/dist/plugin.js $(OPENCODE_PLUGINS)/$(BIN).js
 	@ln -sfn $(CURDIR)/target/$(TARGET_$(HOST))/release/$(BIN) $(BINDIR)/$(BIN)
 	@echo
 	@echo "linked into opencode:"
@@ -178,8 +210,9 @@ unlink:
 # ---------------------------------------------------------------------------
 
 # npm publish packs the tarball itself, so these publish straight from their
-# directories. Order matters: the platform packages must exist on the registry
-# before the plugin that pins them, or the first install resolves no binary.
+# directories. Order is the dependency order and it is not optional: a package
+# cannot be published before the ones it pins exist on the registry, or the
+# first install resolves nothing.
 #
 # Guarded. A bare `make publish` only rehearses; CONFIRM=1 makes it real.
 publish: dist
@@ -187,7 +220,9 @@ publish: dist
 	@for p in $(PLATFORMS); do \
 		npm publish $(DIST)/$(BIN)-$$p --access public $(if $(CONFIRM),,--dry-run) || exit 1; \
 	done
-	npm publish $(PLUGIN) --access public $(if $(CONFIRM),,--dry-run)
+	@for pkg in $(JS_PKGS); do \
+		npm publish $$pkg --access public $(if $(CONFIRM),,--dry-run) || exit 1; \
+	done
 
 # ---------------------------------------------------------------------------
 
@@ -196,19 +231,34 @@ publish: dist
 # round trip. This packs tarballs first on purpose -- `npm install <dir>` links
 # the directory and ignores the `files` field, so only a tarball shows what a
 # consumer actually receives.
+#
+# Both install paths get proved, because they fail differently: the cli alone is
+# what someone installs for the command, and the adapter is what has to reach
+# the binary through a transitive dependency.
 check: dist
-	@rm -rf $(SCRATCH) && mkdir -p $(SCRATCH)/tarballs $(SCRATCH)/project
+	@rm -rf $(SCRATCH) && mkdir -p $(SCRATCH)/tarballs $(SCRATCH)/cli $(SCRATCH)/opencode
 	@for p in $(PLATFORMS); do \
 		(cd $(DIST)/$(BIN)-$$p && npm pack --pack-destination $(CURDIR)/$(SCRATCH)/tarballs >/dev/null) || exit 1; \
 	done
-	@(cd $(PLUGIN) && npm pack --pack-destination $(CURDIR)/$(SCRATCH)/tarballs >/dev/null)
-	@cd $(SCRATCH)/project && npm init -y >/dev/null 2>&1
-	@cd $(SCRATCH)/project && npm install --no-audit --no-fund --loglevel=error \
-		$(CURDIR)/$(SCRATCH)/tarballs/$(BIN)-$(HOST)-$(VERSION).tgz \
-		$(CURDIR)/$(SCRATCH)/tarballs/$(BIN)-$(VERSION).tgz
-	@cd $(SCRATCH)/project && ./node_modules/.bin/$(BIN) --version
+	@for pkg in $(JS_PKGS); do \
+		(cd $$pkg && npm pack --pack-destination $(CURDIR)/$(SCRATCH)/tarballs >/dev/null) || exit 1; \
+	done
+	@echo "==> cli alone"
+	@cd $(SCRATCH)/cli && npm init -y >/dev/null 2>&1
+	@cd $(SCRATCH)/cli && npm install --no-audit --no-fund --loglevel=error \
+		$(CURDIR)/$(SCRATCH)/tarballs/$(call TARBALL,$(HOST)) \
+		$(CURDIR)/$(SCRATCH)/tarballs/$(call TARBALL,cli)
+	@cd $(SCRATCH)/cli && ./node_modules/.bin/$(BIN) --version
+	@echo "==> opencode adapter"
+	@cd $(SCRATCH)/opencode && npm init -y >/dev/null 2>&1
+	@cd $(SCRATCH)/opencode && npm install --no-audit --no-fund --loglevel=error \
+		$(CURDIR)/$(SCRATCH)/tarballs/$(call TARBALL,$(HOST)) \
+		$(CURDIR)/$(SCRATCH)/tarballs/$(call TARBALL,cli) \
+		$(CURDIR)/$(SCRATCH)/tarballs/$(call TARBALL,opencode)
+	@cd $(SCRATCH)/opencode && ./node_modules/.bin/$(BIN) --version
+	@cd $(SCRATCH)/opencode && node -e "import('@agent-friction/opencode').then(m => { if (!m.AgentFriction) { throw new Error('plugin export missing') } console.log('plugin export ok') })"
 	@echo "check ok"
 
 clean:
 	cargo clean
-	rm -rf dist $(PLUGIN)/dist
+	rm -rf dist $(foreach pkg,$(JS_PKGS),$(pkg)/dist)

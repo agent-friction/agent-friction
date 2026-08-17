@@ -6,7 +6,7 @@ members = ["crates/*"]
 edition = "2024"
 version = "0.0.1"
 license = "Apache-2.0"
-repository = "https://github.com/Cali0707/agent-friction"
+repository = "https://github.com/agent-friction/agent-friction"
 rust-version = "1.94"
 
 [workspace.dependencies]

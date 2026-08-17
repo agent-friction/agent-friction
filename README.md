@@ -28,36 +28,51 @@ recommendations from it is the obvious next step.
 
 ## Install
 
-### opencode plugin (npm)
+[Claude Code plugin](#claude-code-plugin) · [CLI only](#cli-only) · [opencode plugin](#opencode-plugin)
 
-Installs the plugin and, via `optionalDependencies`, the prebuilt binary for
-your platform:
+### Claude Code plugin
+
+Add the marketplace and install the plugin:
 
 ```sh
-npm install agent-friction
+/plugin marketplace add github:agent-friction/agent-friction
+/plugin install agent-friction@agent-friction
 ```
 
-Then register it in your opencode config:
+The plugin installs `agent-friction` automatically on first session start — via
+cargo if it's on your `PATH`, otherwise via the first Node package manager it
+finds. You can skip the wait by installing the binary yourself first (see [CLI
+only](#cli-only) below) before enabling the plugin.
 
-```json
-{
-  "plugin": ["agent-friction"]
-}
+### CLI only
+
+The adapter does the recording; the CLI does the reporting. If you want the CLI
+on its own:
+
+```sh
+npm install -g @agent-friction/cli
 ```
+
+or from source, which also covers platforms without a prebuilt binary:
+
+```sh
+cargo install --git https://github.com/agent-friction/agent-friction agent-friction-cli
+```
+
+Both install an `agent-friction` binary. The plugin falls back to `PATH`, so a
+cargo install is enough for it to work.
+
+### opencode plugin
+
+```sh
+opencode plugin @agent-friction/opencode
+```
+
+That installs the plugin and adds it to your project config; pass `-g` for your
+global config. It brings `@agent-friction/cli` with it, which pulls the prebuilt
+binary for your platform and puts the `agent-friction` command on your path.
 
 Prebuilt binaries ship for darwin-arm64, darwin-x64, linux-x64 and linux-arm64.
-
-### CLI only (cargo)
-
-The plugin does the recording; the CLI does the reporting. If you only want the
-CLI, or you're on a platform without a prebuilt binary:
-
-```sh
-cargo install --git https://github.com/Cali0707/agent-friction agent-friction-cli
-```
-
-That installs an `agent-friction` binary. The plugin will find it on `PATH` if
-no platform package is present.
 
 ## Usage
 
@@ -92,6 +107,19 @@ evidence for each.
 A pattern is only widened when at least three distinct commands support it, so
 `git status --short` alone never becomes `git status *`. The Evidence column
 shows exactly which observations a widened rule rests on.
+
+## Packages
+
+| Package | What it is |
+| --- | --- |
+| [`claude/`](claude) | The Claude Code plugin. Records prompts and failures via hooks. |
+| [`@agent-friction/cli`](npm/cli) | The `agent-friction` command, and the binary resolution adapters share. |
+| `@agent-friction/{darwin,linux}-{arm64,x64}` | One prebuilt binary each. Installed automatically. |
+| [`@agent-friction/opencode`](npm/opencode) | The opencode plugin. Records prompts and failures. |
+| [`agent-friction-cli`](crates/cli) / [`agent-friction-core`](crates/core) | The Rust crates behind the binary. |
+
+Adapters are per-host and deliberately thin, so a future one does not drag
+opencode's dependencies into an install that has nothing to do with opencode.
 
 ## Development
 

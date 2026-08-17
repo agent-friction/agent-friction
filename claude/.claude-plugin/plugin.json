@@ -1,0 +1,9 @@
+{
+  "name": "agent-friction",
+  "description": "Records the permission prompts you answer and the tool calls that fail, so friction can be measured instead of guessed at.",
+  "version": "0.0.1",
+  "author": {
+    "name": "agent-friction",
+    "url": "https://github.com/Cali0707/agent-friction"
+  }
+}
