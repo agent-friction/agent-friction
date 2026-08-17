@@ -1,0 +1,39 @@
+{
+  "name": "agent-friction",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/plugin.js",
+  "types": "./dist/plugin.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/plugin.d.ts",
+      "default": "./dist/plugin.js"
+    }
+  },
+  "bin": {
+    "agent-friction": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build:js && bun run build:types",
+    "build:js": "bun build ./src/plugin.ts ./src/cli.ts --outdir dist --target node",
+    "build:types": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "optionalDependencies": {
+    "agent-friction-darwin-arm64": "0.0.1",
+    "agent-friction-darwin-x64": "0.0.1",
+    "agent-friction-linux-x64": "0.0.1",
+    "agent-friction-linux-arm64": "0.0.1"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.18",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
