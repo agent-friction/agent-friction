@@ -1,0 +1,9 @@
+# dependencies (bun install)
+node_modules
+
+# build output
+dist
+*.tgz
+
+# caches
+*.tsbuildinfo

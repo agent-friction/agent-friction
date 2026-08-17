@@ -3,23 +3,50 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "agent-friction",
+      "name": "@agent-friction/monorepo",
+    },
+    "cli": {
+      "name": "@agent-friction/cli",
+      "version": "0.0.1",
+      "bin": {
+        "agent-friction": "./dist/cli.js",
+      },
       "devDependencies": {
-        "@opencode-ai/plugin": "^1.18.18",
         "@types/bun": "latest",
       },
       "optionalDependencies": {
-        "agent-friction-darwin-arm64": "0.0.1",
-        "agent-friction-darwin-x64": "0.0.1",
-        "agent-friction-linux-arm64": "0.0.1",
-        "agent-friction-linux-x64": "0.0.1",
+        "@agent-friction/darwin-arm64": "0.0.1",
+        "@agent-friction/darwin-x64": "0.0.1",
+        "@agent-friction/linux-arm64": "0.0.1",
+        "@agent-friction/linux-x64": "0.0.1",
       },
       "peerDependencies": {
         "typescript": "^5",
       },
     },
+    "opencode": {
+      "name": "@agent-friction/opencode",
+      "version": "0.0.1",
+      "dependencies": {
+        "@agent-friction/cli": "0.0.1",
+      },
+      "devDependencies": {
+        "@opencode-ai/plugin": "^1.18.18",
+        "@opencode-ai/sdk": "^1.18.18",
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "@opencode-ai/plugin": ">=1.18.18",
+        "@opencode-ai/sdk": ">=1.18.18",
+        "typescript": "^5",
+      },
+    },
   },
   "packages": {
+    "@agent-friction/cli": ["@agent-friction/cli@workspace:cli"],
+
+    "@agent-friction/opencode": ["@agent-friction/opencode@workspace:opencode"],
+
     "@ai-sdk/provider": ["@ai-sdk/provider@3.0.8", "", { "dependencies": { "json-schema": "^0.4.0" } }, "sha512-oGMAgGoQdBXbZqNG0Ze56CHjDZ1IDYOwGYxYjO5KLSlz5HiNQ9udIXsPZ61VWaHGZ5XW/jyjmr6t2xz2jGVwbQ=="],
 
     "@msgpackr-extract/msgpackr-extract-darwin-arm64": ["@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4", "", { "os": "darwin", "cpu": "arm64" }, "sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ=="],

@@ -1,6 +1,6 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import type { Event } from "@opencode-ai/sdk/v2/types";
-import { resolveBinary } from "./binary";
+import { resolveBinary } from "@agent-friction/cli";
 
 /**
  * The server runs two independent permission stacks with separate pending

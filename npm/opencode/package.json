@@ -1,0 +1,42 @@
+{
+  "name": "@agent-friction/opencode",
+  "version": "0.0.1",
+  "description": "The agent-friction plugin for opencode: records the permission prompts you answer and the tool calls that fail.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agent-friction/agent-friction.git"
+  },
+  "type": "module",
+  "main": "./dist/plugin.js",
+  "types": "./dist/plugin.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/plugin.d.ts",
+      "default": "./dist/plugin.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build:js && bun run build:types",
+    "build:js": "bun build ./src/plugin.ts --outdir dist --target node --external @agent-friction/cli",
+    "build:types": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "dependencies": {
+    "@agent-friction/cli": "0.0.1"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=1.18.18",
+    "@opencode-ai/sdk": ">=1.18.18",
+    "typescript": "^5"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.18",
+    "@opencode-ai/sdk": "^1.18.18",
+    "@types/bun": "latest"
+  }
+}

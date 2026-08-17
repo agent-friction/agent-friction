@@ -1,0 +1,44 @@
+{
+  "name": "@agent-friction/cli",
+  "version": "0.0.1",
+  "description": "The agent-friction command line tool: records permission prompts and tool failures, and reports on them.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agent-friction/agent-friction.git"
+  },
+  "type": "module",
+  "main": "./dist/binary.js",
+  "types": "./dist/binary.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/binary.d.ts",
+      "default": "./dist/binary.js"
+    }
+  },
+  "bin": {
+    "agent-friction": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build:js && bun run build:types",
+    "build:js": "bun build ./src/binary.ts ./src/cli.ts --outdir dist --target node",
+    "build:types": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "optionalDependencies": {
+    "@agent-friction/darwin-arm64": "0.0.1",
+    "@agent-friction/darwin-x64": "0.0.1",
+    "@agent-friction/linux-x64": "0.0.1",
+    "@agent-friction/linux-arm64": "0.0.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
