@@ -1,18 +1,25 @@
 [package]
 name = "agent-friction-cli"
+description = "Records the permission prompts you answer and the tool calls that fail, then suggests which approvals to stop granting by hand."
 edition.workspace = true
 version.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
-agent-friction-core = { path = "../core" }
+# Carries a version as well as a path: the path is what the workspace builds
+# against, the version is what a published crate resolves from the registry.
+agent-friction-core = { path = "../core", version = "0.0.1" }
 anyhow = { workspace = true }
 clap = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
-tempfile = { workspace = true }
 comfy-table = { version = "8.0.0", features = ["custom_styling"] }
 interim = { version = "0.2.1", features = ["chrono_0_4"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [[bin]]
 name = "agent-friction"
